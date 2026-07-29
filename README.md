@@ -4,7 +4,34 @@ Career Knowledge Copilot 是一个面向大学生的求职资料知识库助手�
 
 ## 当前阶段
 
-本仓库目前是 MVP 的产品与技术设计阶段，尚未包含业务实现代码。实现时采用 Python、FastAPI、PostgreSQL、pgvector、Vue 3 和 Docker Compose。
+项目已完成最小 FastAPI 后端骨架，当前包含 `GET /health` 和对应的自动化测试。PDF、数据库、RAG、Vue 和 Docker 功能将按 MVP 任务逐步实现。整体技术栈为 Python、FastAPI、PostgreSQL、pgvector、Vue 3 和 Docker Compose。
+
+## 当前可运行功能
+
+启动后端：
+
+```bash
+source .venv/Scripts/activate
+python -m uvicorn backend.app.main:app --reload
+```
+
+打开接口文档：
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+健康检查接口：
+
+```text
+GET http://127.0.0.1:8000/health
+```
+
+运行测试：
+
+```bash
+python -m pytest -q
+```
 
 ## MVP 能做什么
 
