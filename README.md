@@ -1,69 +1,87 @@
-、# Career Knowledge Copilot
+# Career Knowledge Copilot
 
-Career Knowledge Copilot 是一个面向大学生的求职资料知识库助手。它帮助用户上传岗位 JD、面试资料和项目材料 PDF，并根据这些资料回答问题。每个有依据的回答都会列出文件名和页码，方便用户核对原文。
+Career Knowledge Copilot 是一个面向大学生的求职资料知识库助手。项目最终将支持上传岗位 JD、面试资料和项目材料 PDF，并根据资料回答问题、给出文件名和页码引用。
 
 ## 当前阶段
 
-项目已完成最小 FastAPI 后端骨架，当前包含 `GET /health` 和对应的自动化测试。PDF、数据库、RAG、Vue 和 Docker 功能将按 MVP 任务逐步实现。整体技术栈为 Python、FastAPI、PostgreSQL、pgvector、Vue 3 和 Docker Compose。
+项目目前处于 FastAPI 后端学习与骨架搭建阶段，已经实现了两个可运行接口：
 
-## 当前可运行功能
+- `GET /health`：返回服务健康状态，用于确认后端已正常启动。
+- `POST /chat`：接收 JSON 中的 `message`，返回包含该消息的模拟回复。
 
-启动后端：
+当前尚未接入大模型、PDF 上传、数据库、向量检索、Vue 前端或 Docker Compose。这些是后续 MVP 的实现目标，而不是已完成的功能。
+
+## 本地启动
+
+在 Git Bash 中进入项目目录后执行：
 
 ```bash
 source .venv/Scripts/activate
 python -m uvicorn backend.app.main:app --reload
 ```
 
-打开接口文档：
+启动成功后打开 Swagger 接口文档：
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-健康检查接口：
+## 当前接口
+
+### 健康检查
 
 ```text
-GET http://127.0.0.1:8000/health
+GET /health
 ```
 
-运行测试：
+返回：
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### 模拟聊天
+
+```text
+POST /chat
+```
+
+请求：
+
+```json
+{
+  "message": "什么是 Python？"
+}
+```
+
+返回：
+
+```json
+{
+  "reply": "你问的是：什么是 Python？"
+}
+```
+
+`message` 是必填字段。缺失时 FastAPI 自动返回 `422`，说明请求 JSON 不符合接口要求。
+
+## 运行测试
+
+另开一个 Git Bash 窗口，执行：
 
 ```bash
+source .venv/Scripts/activate
 python -m pytest -q
 ```
 
-## MVP 能做什么
-
-- 上传一个文字型 PDF（单文件不超过 20 MB）。
-- 在文档列表中查看处理状态，并删除文档。
-- 对已成功处理的资料提问。
-- 在回答中查看文件名和页码引用。
-- 在同一浏览器中保存并恢复一条基础对话记录。
-
-## 明确不做什么
-
-MVP 不包含登录、OCR、Agent、支付、复杂权限、多人协作或非 PDF 文件支持。扫描件 PDF 因未做 OCR 而不能保证可用。
+当前有 3 条自动化测试：健康检查、正常聊天请求、缺少 `message` 的请求校验。
 
 ## 文档导航
 
 | 文件 | 作用 |
 | --- | --- |
-| [docs/PRD.md](docs/PRD.md) | 定义目标用户、用户问题、MVP 范围、非目标和验收标准，回答“为什么做、做什么”。 |
-| [docs/user-flow.md](docs/user-flow.md) | 描述上传、删除、提问、引用核对和异常时的完整操作路径，回答“用户如何使用”。 |
-| [docs/technical-design.md](docs/technical-design.md) | 说明 Vue、FastAPI、PostgreSQL、pgvector、大模型与 Docker Compose 如何协作，包含 API、数据流和最小表结构，回答“如何实现”。 |
-| [docs/test-cases.md](docs/test-cases.md) | 提供 22 条可重复执行的验收用例，回答“如何确认功能正确”。 |
-
-## 建议阅读顺序
-
-零基础开发者建议依次阅读 PRD、用户流程、技术设计和测试用例。先理解用户要完成的事情，再理解系统如何处理数据，最后以测试用例检查实现是否符合预期。
-
-## 未来实现的本地启动目标
-
-实现完成后，项目应支持以下流程：
-
-```bash
-docker compose up --build
-```
-
-该命令的预期作用是同时启动 Vue 前端、FastAPI 后端和带 pgvector 的 PostgreSQL 数据库。真实模型 API 密钥应配置在不提交 Git 的 `.env` 文件中。
+| [docs/PRD.md](docs/PRD.md) | 产品目标、MVP 范围和非目标。 |
+| [docs/user-flow.md](docs/user-flow.md) | 用户上传、提问、查看引用等目标流程。 |
+| [docs/technical-design.md](docs/technical-design.md) | 后续完整 MVP 的架构、数据流和数据库设计。 |
+| [docs/test-cases.md](docs/test-cases.md) | 完整 MVP 的验收用例清单。 |
