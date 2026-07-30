@@ -1,4 +1,9 @@
 from fastapi import FastAPI
+from pydantic import BaseModel
+
+
+class ChatRequest(BaseModel):
+    message: str
 
 
 app = FastAPI(
@@ -12,3 +17,8 @@ app = FastAPI(
 def health() -> dict[str, str]:
     """Return a lightweight readiness response for local checks and deployment probes."""
     return {"status": "ok"}
+
+
+@app.post("/chat", tags=["chat"])
+def chat(request: ChatRequest) -> dict[str, str]:
+    return {"reply": f"你问的是：{request.message}"}

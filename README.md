@@ -1,4 +1,4 @@
-# Career Knowledge Copilot
+、# Career Knowledge Copilot
 
 Career Knowledge Copilot 是一个面向大学生的求职资料知识库助手。它帮助用户上传岗位 JD、面试资料和项目材料 PDF，并根据这些资料回答问题。每个有依据的回答都会列出文件名和页码，方便用户核对原文。
 
