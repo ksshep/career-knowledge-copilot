@@ -4,12 +4,13 @@ Career Knowledge Copilot 是一个面向大学生的求职资料知识库助手�
 
 ## 当前阶段
 
-项目目前处于 FastAPI 后端学习与骨架搭建阶段，已经实现了两个可运行接口：
+项目目前处于 FastAPI 后端学习与骨架搭建阶段，已经实现了三个可运行接口：
 
 - `GET /health`：返回服务健康状态，用于确认后端已正常启动。
 - `POST /chat`：接收 JSON 中的 `message`，返回包含该消息的模拟回复。
+- `POST /documents`：接收一个不超过 20 MB 的 PDF，保存到项目根目录的 `uploads/`。
 
-当前尚未接入大模型、PDF 上传、数据库、向量检索、Vue 前端或 Docker Compose。这些是后续 MVP 的实现目标，而不是已完成的功能。
+当前尚未接入大模型、PDF 解析、数据库、向量检索、Vue 前端或 Docker Compose。这些是后续 MVP 的实现目标，而不是已完成的功能。
 
 ## 本地启动
 
@@ -66,6 +67,25 @@ POST /chat
 
 `message` 是必填字段。缺失时 FastAPI 自动返回 `422`，说明请求 JSON 不符合接口要求。
 
+### 基础 PDF 上传
+
+```text
+POST /documents
+```
+
+以 `multipart/form-data` 提交名为 `file` 的 PDF 文件。接口只接受 MIME 类型为 `application/pdf` 且文件名以 `.pdf` 结尾的文件，单文件最大 20 MB。
+
+成功时返回 `201`：
+
+```json
+{
+  "id": "文件 UUID",
+  "filename": "resume.pdf",
+  "size_bytes": 1024,
+  "status": "uploaded"
+}
+```
+
 ## 运行测试
 
 另开一个 Git Bash 窗口，执行：
@@ -75,7 +95,7 @@ source .venv/Scripts/activate
 python -m pytest -q
 ```
 
-当前有 3 条自动化测试：健康检查、正常聊天请求、缺少 `message` 的请求校验。
+当前有 6 条自动化测试：健康检查、两条聊天接口测试，以及 PDF 上传、非 PDF 拒绝、超过 20 MB 拒绝。
 
 ## 文档导航
 
