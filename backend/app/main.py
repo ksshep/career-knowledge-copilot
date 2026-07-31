@@ -1,13 +1,19 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from .database import get_db
+from .models import Document
 
 
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 UPLOADS_DIR = PROJECT_ROOT / "uploads"
+DOCUMENTS: dict[str, dict[str, str | int]] = {}
 
 
 class ChatRequest(BaseModel):
@@ -33,7 +39,10 @@ def chat(request: ChatRequest) -> dict[str, str]:
 
 
 @app.post("/documents", status_code=201, tags=["documents"])
-async def upload_document(file: UploadFile = File(...)) -> dict[str, str | int]:
+async def upload_document(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> dict[str, str | int]:
     filename = Path(file.filename or "").name
     if file.content_type != "application/pdf" or Path(filename).suffix.lower() != ".pdf":
         raise HTTPException(status_code=400, detail="Only PDF files are allowed.")
@@ -44,13 +53,39 @@ async def upload_document(file: UploadFile = File(...)) -> dict[str, str | int]:
         raise HTTPException(status_code=400, detail="File size must not exceed 20 MB.")
 
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    document_id = str(uuid4())
+    document_id = uuid4()
     storage_path = UPLOADS_DIR / f"{document_id}_{filename}"
     storage_path.write_bytes(content)
 
-    return {
-        "id": document_id,
+    document = Document(
+        id=document_id,
+        filename=filename,
+        storage_path=str(storage_path),
+        file_size_bytes=file_size,
+        status="processing",
+    )
+
+    try:
+        db.add(document)
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        storage_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to save document metadata.",
+        )
+
+    metadata = {
+        "id": str(document.id),
         "filename": filename,
         "size_bytes": file_size,
-        "status": "uploaded",
+        "status": "processing",
     }
+    DOCUMENTS[str(document.id)] = metadata
+    return metadata
+
+
+@app.get("/documents", tags=["documents"])
+def list_documents() -> dict[str, list[dict[str, str | int]]]:
+    return {"items": list(DOCUMENTS.values())}

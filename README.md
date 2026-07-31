@@ -4,11 +4,12 @@ Career Knowledge Copilot 是一个面向大学生的求职资料知识库助手�
 
 ## 当前阶段
 
-项目目前处于 FastAPI 后端学习与骨架搭建阶段，已经实现了三个可运行接口：
+项目目前处于 FastAPI 后端学习与骨架搭建阶段，已经实现了四个可运行接口：
 
 - `GET /health`：返回服务健康状态，用于确认后端已正常启动。
 - `POST /chat`：接收 JSON 中的 `message`，返回包含该消息的模拟回复。
-- `POST /documents`：接收一个不超过 20 MB 的 PDF，保存到项目根目录的 `uploads/`。
+- `POST /documents`：接收一个不超过 20 MB 的 PDF，保存到项目根目录的 `uploads/`，并将元数据写入 PostgreSQL，初始状态为 `processing`。
+- `GET /documents`：返回当前进程内存中已经上传的文档元数据列表。
 
 当前尚未接入大模型、PDF 解析、数据库、向量检索、Vue 前端或 Docker Compose。这些是后续 MVP 的实现目标，而不是已完成的功能。
 
@@ -86,6 +87,27 @@ POST /documents
 }
 ```
 
+### 文档列表
+
+```text
+GET /documents
+```
+
+返回当前进程内存中的文档元数据。服务重启后该列表会清空，正式版本需要替换为数据库。
+
+```json
+{
+  "items": [
+    {
+      "id": "文件 UUID",
+      "filename": "resume.pdf",
+      "size_bytes": 1024,
+      "status": "uploaded"
+    }
+  ]
+}
+```
+
 ## 运行测试
 
 另开一个 Git Bash 窗口，执行：
@@ -95,7 +117,7 @@ source .venv/Scripts/activate
 python -m pytest -q
 ```
 
-当前有 6 条自动化测试：健康检查、两条聊天接口测试，以及 PDF 上传、非 PDF 拒绝、超过 20 MB 拒绝。
+当前有 11 条自动化测试：健康检查、三条聊天接口测试、PDF 上传校验、文档列表测试，以及数据库写入成功和数据库失败后的文件清理测试。
 
 ## 文档导航
 
