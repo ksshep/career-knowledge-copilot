@@ -9,9 +9,10 @@ Career Knowledge Copilot 是一个面向大学生的求职资料知识库助手�
 - `GET /health`：返回服务健康状态，用于确认后端已正常启动。
 - `POST /chat`：接收 JSON 中的 `message`，返回包含该消息的模拟回复。
 - `POST /documents`：接收一个不超过 20 MB 的 PDF，保存到项目根目录的 `uploads/`，并将元数据写入 PostgreSQL，初始状态为 `processing`。
-- `GET /documents`：返回当前进程内存中已经上传的文档元数据列表。
+- `GET /documents`：从 PostgreSQL 查询并返回已上传的文档元数据列表。
+- `DELETE /documents/{id}`：删除数据库记录和本地 PDF 文件。
 
-当前尚未接入大模型、PDF 解析、数据库、向量检索、Vue 前端或 Docker Compose。这些是后续 MVP 的实现目标，而不是已完成的功能。
+当前尚未接入大模型、PDF 解析、向量检索或 Vue 前端；数据库持久化和 Docker Compose 基础设施已经完成，后续 MVP 将继续接入这些能力。
 
 ## 本地启动
 
@@ -93,7 +94,7 @@ POST /documents
 GET /documents
 ```
 
-返回当前进程内存中的文档元数据。服务重启后该列表会清空，正式版本需要替换为数据库。
+返回 PostgreSQL 中的文档元数据。服务重启后列表仍可从数据库恢复。
 
 ```json
 {
@@ -108,6 +109,14 @@ GET /documents
 }
 ```
 
+### 删除文档
+
+```text
+DELETE /documents/{id}
+```
+
+成功时返回 `204 No Content`。文档不存在时返回 `404`。数据库删除失败时会回滚，保留原 PDF；文件已经不存在时不会导致删除接口失败。
+
 ## 运行测试
 
 另开一个 Git Bash 窗口，执行：
@@ -117,7 +126,7 @@ source .venv/Scripts/activate
 python -m pytest -q
 ```
 
-当前有 11 条自动化测试：健康检查、三条聊天接口测试、PDF 上传校验、文档列表测试，以及数据库写入成功和数据库失败后的文件清理测试。
+当前有 17 条自动化测试：健康检查、聊天、PDF 上传和列表，以及文档删除的成功、失败和边界场景。测试会自动使用独立的 `career_copilot_test` 数据库，不会清理开发数据库中的手动数据。
 
 ## 文档导航
 

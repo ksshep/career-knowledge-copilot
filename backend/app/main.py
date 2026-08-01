@@ -1,8 +1,9 @@
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -87,5 +88,41 @@ async def upload_document(
 
 
 @app.get("/documents", tags=["documents"])
-def list_documents() -> dict[str, list[dict[str, str | int]]]:
-    return {"items": list(DOCUMENTS.values())}
+def list_documents(
+    db: Session = Depends(get_db),
+) -> dict[str, list[dict[str, str | int]]]:
+    documents = db.scalars(
+        select(Document).order_by(Document.created_at.desc())
+    ).all()
+    return {
+        "items": [
+            {
+                "id": str(document.id),
+                "filename": document.filename,
+                "size_bytes": document.file_size_bytes,
+                "status": document.status,
+            }
+            for document in documents
+        ]
+    }
+
+
+@app.delete("/documents/{document_id}", status_code=204, tags=["documents"])
+def delete_document(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+) -> None:
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    storage_path = Path(document.storage_path)
+    try:
+        db.delete(document)
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete document.")
+
+    storage_path.unlink(missing_ok=True)
+    DOCUMENTS.pop(str(document_id), None)

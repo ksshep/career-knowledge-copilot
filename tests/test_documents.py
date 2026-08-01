@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from backend.app import main
 from backend.app.database import SessionLocal, get_db
@@ -31,15 +31,15 @@ def test_upload_pdf_saves_file(tmp_path, monkeypatch):
 
     response = client.post(
         "/documents",
-        files={"file": ("resume.pdf", file_content, "application/pdf")},
+        files={"file": ("pytest_resume.pdf", file_content, "application/pdf")},
     )
 
     assert response.status_code == 201
     body = response.json()
-    assert body["filename"] == "resume.pdf"
+    assert body["filename"] == "pytest_resume.pdf"
     assert body["size_bytes"] == len(file_content)
     assert body["status"] == "processing"
-    assert (tmp_path / f"{body['id']}_resume.pdf").read_bytes() == file_content
+    assert (tmp_path / f"{body['id']}_pytest_resume.pdf").read_bytes() == file_content
 
 
 def test_upload_rejects_non_pdf_file():
@@ -75,10 +75,11 @@ def test_uploaded_pdf_appears_in_document_list(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "UPLOADS_DIR", tmp_path)
     upload_response = client.post(
         "/documents",
-        files={"file": ("resume.pdf", b"%PDF-1.4", "application/pdf")},
+        files={"file": ("pytest_resume.pdf", b"%PDF-1.4", "application/pdf")},
     )
 
     document_id = upload_response.json()["id"]
+    main.DOCUMENTS.clear()
     response = client.get("/documents")
 
     assert response.status_code == 200
@@ -90,12 +91,12 @@ def test_document_list_contains_metadata(tmp_path, monkeypatch):
     file_content = b"%PDF-1.4\nMetadata test"
     client.post(
         "/documents",
-        files={"file": ("portfolio.pdf", file_content, "application/pdf")},
+        files={"file": ("pytest_portfolio.pdf", file_content, "application/pdf")},
     )
 
     item = client.get("/documents").json()["items"][0]
 
-    assert item["filename"] == "portfolio.pdf"
+    assert item["filename"] == "pytest_portfolio.pdf"
     assert item["size_bytes"] == len(file_content)
     assert item["status"] == "processing"
 
@@ -106,7 +107,7 @@ def test_upload_writes_document_to_database(tmp_path, monkeypatch):
 
     response = client.post(
         "/documents",
-        files={"file": ("database.pdf", file_content, "application/pdf")},
+        files={"file": ("pytest_database.pdf", file_content, "application/pdf")},
     )
 
     document_id = UUID(response.json()["id"])
@@ -114,8 +115,8 @@ def test_upload_writes_document_to_database(tmp_path, monkeypatch):
         document = db.scalar(select(Document).where(Document.id == document_id))
 
     assert document is not None
-    assert document.filename == "database.pdf"
-    assert document.storage_path.endswith(f"{document_id}_database.pdf")
+    assert document.filename == "pytest_database.pdf"
+    assert document.storage_path.endswith(f"{document_id}_pytest_database.pdf")
     assert document.file_size_bytes == len(file_content)
     assert document.status == "processing"
 
@@ -152,3 +153,83 @@ def test_upload_cleans_file_when_database_commit_fails(tmp_path, monkeypatch):
     assert response.json() == {"detail": "Failed to save document metadata."}
     assert list(tmp_path.iterdir()) == []
     assert main.DOCUMENTS == {}
+
+
+def test_delete_existing_document_returns_no_content(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "UPLOADS_DIR", tmp_path)
+    upload_response = client.post(
+        "/documents",
+        files={"file": ("pytest_delete.pdf", b"%PDF-1.4", "application/pdf")},
+    )
+
+    response = client.delete(f"/documents/{upload_response.json()['id']}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+
+def test_delete_removes_database_record(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "UPLOADS_DIR", tmp_path)
+    upload_response = client.post(
+        "/documents",
+        files={"file": ("pytest_database_delete.pdf", b"%PDF-1.4", "application/pdf")},
+    )
+    document_id = UUID(upload_response.json()["id"])
+
+    response = client.delete(f"/documents/{document_id}")
+    with SessionLocal() as db:
+        document = db.get(Document, document_id)
+
+    assert response.status_code == 204
+    assert document is None
+
+
+def test_delete_removes_local_pdf(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "UPLOADS_DIR", tmp_path)
+    upload_response = client.post(
+        "/documents",
+        files={"file": ("pytest_file_delete.pdf", b"%PDF-1.4", "application/pdf")},
+    )
+    document_id = upload_response.json()["id"]
+    storage_path = tmp_path / f"{document_id}_pytest_file_delete.pdf"
+
+    response = client.delete(f"/documents/{document_id}")
+
+    assert response.status_code == 204
+    assert not storage_path.exists()
+
+
+def test_delete_unknown_document_returns_not_found():
+    response = client.delete(f"/documents/{uuid4()}")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Document not found."}
+
+
+def test_delete_same_document_twice_returns_not_found(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "UPLOADS_DIR", tmp_path)
+    upload_response = client.post(
+        "/documents",
+        files={"file": ("pytest_twice.pdf", b"%PDF-1.4", "application/pdf")},
+    )
+    document_id = upload_response.json()["id"]
+
+    first_response = client.delete(f"/documents/{document_id}")
+    second_response = client.delete(f"/documents/{document_id}")
+
+    assert first_response.status_code == 204
+    assert second_response.status_code == 404
+
+
+def test_delete_succeeds_when_local_file_is_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "UPLOADS_DIR", tmp_path)
+    upload_response = client.post(
+        "/documents",
+        files={"file": ("pytest_missing_file.pdf", b"%PDF-1.4", "application/pdf")},
+    )
+    document_id = upload_response.json()["id"]
+    (tmp_path / f"{document_id}_pytest_missing_file.pdf").unlink()
+
+    response = client.delete(f"/documents/{document_id}")
+
+    assert response.status_code == 204
