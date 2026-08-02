@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 from backend.app import document_processor, main
 from backend.app.database import SessionLocal, get_db
 from backend.app.document_processor import process_document
-from backend.app.models import Document
+from backend.app.models import Document, DocumentPage
 
 
 client = TestClient(main.app)
@@ -292,6 +292,7 @@ def test_process_document_missing_document_is_safe():
 
 def test_process_document_rolls_back_on_database_error(monkeypatch):
     class FakeDocument:
+        id = uuid4()
         storage_path = "unused.pdf"
         status = "processing"
         error_message = None
@@ -304,6 +305,12 @@ def test_process_document_rolls_back_on_database_error(monkeypatch):
 
         def get(self, model, document_id):
             return self.document
+
+        def execute(self, statement):
+            return None
+
+        def add(self, page):
+            pass
 
         def commit(self):
             raise SQLAlchemyError("simulated status update failure")
@@ -326,6 +333,31 @@ def test_process_document_rolls_back_on_database_error(monkeypatch):
 
     assert session.rollback_called is True
     assert session.closed is True
+
+
+def test_delete_document_cascades_page_text(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "UPLOADS_DIR", tmp_path)
+    pdf_path = tmp_path / "cascade.pdf"
+    _write_pdf(pdf_path, ["Page one"])
+    with SessionLocal() as db:
+        document = _create_document(db, pdf_path, "cascade.pdf")
+        db.add(
+            DocumentPage(
+                document_id=document.id,
+                page_number=1,
+                text="Page one",
+            )
+        )
+        db.commit()
+        document_id = document.id
+
+    response = client.delete(f"/documents/{document_id}")
+
+    assert response.status_code == 204
+    with SessionLocal() as db:
+        assert db.scalars(
+            select(DocumentPage).where(DocumentPage.document_id == document_id)
+        ).all() == []
 
 
 def test_delete_existing_document_returns_no_content(tmp_path, monkeypatch):
