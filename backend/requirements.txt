@@ -7,3 +7,4 @@ sqlalchemy
 psycopg[binary]
 alembic
 python-dotenv
+pypdf
