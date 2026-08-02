@@ -11,6 +11,7 @@ Career Knowledge Copilot 是面向大学生求职场景的资料知识库助手�
 - `DELETE /documents/{id}`：删除文档记录和本地 PDF 文件。
 - PDF 后台处理：上传后状态为 `processing`，解析成功变为 `ready`，解析失败变为 `failed`，失败原因保存到 `error_message`。
 - `document_pages` 表：持久化每页提取出的文本，服务重启后仍可读取。
+- `document_chunks` 表：持久化按页切分后的文本片段，为后续 Embedding 和向量检索准备数据。
 
 当前尚未接入 OCR、Embedding、RAG、LangChain、真实大模型或 Vue 前端。
 
@@ -59,5 +60,6 @@ git diff --check
 | `backend/app/models.py` | `Document`、`DocumentPage` 数据模型 |
 | `backend/app/pdf_parser.py` | 按页提取 PDF 文本 |
 | `backend/app/document_processor.py` | 后台解析并更新文档状态、页面文本 |
+| `backend/app/text_splitter.py` | 将页面文本切成带重叠的小段 |
 | `alembic/versions/` | 数据库迁移历史 |
 | `tests/` | 自动化测试 |

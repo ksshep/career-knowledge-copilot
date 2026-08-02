@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 from backend.app import document_processor, main
 from backend.app.database import SessionLocal, get_db
 from backend.app.document_processor import process_document
-from backend.app.models import Document, DocumentPage
+from backend.app.models import Document, DocumentChunk, DocumentPage
 
 
 client = TestClient(main.app)
@@ -254,6 +254,80 @@ def test_process_document_marks_text_pdf_ready(tmp_path):
     assert pdf_path.exists()
 
 
+def test_process_document_saves_pages_and_chunks(tmp_path):
+    pdf_path = tmp_path / "chunks.pdf"
+    first_text = "First page text " * 45
+    second_text = "Second page text " * 45
+    _write_pdf(pdf_path, [first_text, second_text])
+    with SessionLocal() as db:
+        document = _create_document(db, pdf_path)
+        document_id = document.id
+
+    process_document(document_id)
+
+    with SessionLocal() as db:
+        saved = db.get(Document, document_id)
+        pages = db.scalars(
+            select(DocumentPage)
+            .where(DocumentPage.document_id == document_id)
+            .order_by(DocumentPage.page_number)
+        ).all()
+        chunks = db.scalars(
+            select(DocumentChunk)
+            .where(DocumentChunk.document_id == document_id)
+            .order_by(DocumentChunk.chunk_index)
+        ).all()
+
+        assert saved.status == "ready"
+        assert [page.page_number for page in pages] == [1, 2]
+        assert pages[0].text.strip() == " ".join(first_text.split())
+        assert pages[1].text.strip() == " ".join(second_text.split())
+        assert len(chunks) > 2
+        assert [chunk.chunk_index for chunk in chunks] == list(range(len(chunks)))
+        assert {chunk.page_number for chunk in chunks} == {1, 2}
+        assert all(chunk.content.strip() for chunk in chunks)
+        assert all(len(chunk.content) <= 500 for chunk in chunks)
+        assert any(
+            chunk.page_number == 1 and "First page text" in chunk.content
+            for chunk in chunks
+        )
+        assert any(
+            chunk.page_number == 2 and "Second page text" in chunk.content
+            for chunk in chunks
+        )
+
+
+def test_reprocessing_replaces_old_chunks_without_duplicates(tmp_path):
+    pdf_path = tmp_path / "repeat.pdf"
+    _write_pdf(pdf_path, ["Repeatable text " * 45, "Second page " * 45])
+    with SessionLocal() as db:
+        document = _create_document(db, pdf_path)
+        document_id = document.id
+
+    process_document(document_id)
+    with SessionLocal() as db:
+        first_ids = [
+            chunk.id
+            for chunk in db.scalars(
+                select(DocumentChunk)
+                .where(DocumentChunk.document_id == document_id)
+                .order_by(DocumentChunk.chunk_index)
+            )
+        ]
+
+    process_document(document_id)
+    with SessionLocal() as db:
+        chunks = db.scalars(
+            select(DocumentChunk)
+            .where(DocumentChunk.document_id == document_id)
+            .order_by(DocumentChunk.chunk_index)
+        ).all()
+
+    assert len(chunks) == len(first_ids)
+    assert [chunk.chunk_index for chunk in chunks] == list(range(len(chunks)))
+    assert {chunk.id for chunk in chunks}.isdisjoint(first_ids)
+
+
 def test_process_document_skips_blank_page_and_preserves_page_number(tmp_path):
     pdf_path = tmp_path / "mixed.pdf"
     _write_pdf(pdf_path, ["Page one", "   "])
@@ -291,6 +365,42 @@ def test_process_document_marks_blank_pdf_failed(tmp_path):
         assert saved.status == "failed"
     assert saved.error_message
     assert pdf_path.exists()
+
+
+def test_failed_processing_leaves_no_pages_or_chunks(tmp_path):
+    pdf_path = tmp_path / "failed_with_old_data.pdf"
+    _write_pdf(pdf_path, [""])
+    with SessionLocal() as db:
+        document = _create_document(db, pdf_path)
+        db.add(
+            DocumentPage(
+                document_id=document.id,
+                page_number=1,
+                text="Old page",
+            )
+        )
+        db.add(
+            DocumentChunk(
+                document_id=document.id,
+                page_number=1,
+                chunk_index=0,
+                content="Old chunk",
+            )
+        )
+        db.commit()
+        document_id = document.id
+
+    process_document(document_id)
+
+    with SessionLocal() as db:
+        saved = db.get(Document, document_id)
+        assert saved.status == "failed"
+        assert db.scalars(
+            select(DocumentPage).where(DocumentPage.document_id == document_id)
+        ).all() == []
+        assert db.scalars(
+            select(DocumentChunk).where(DocumentChunk.document_id == document_id)
+        ).all() == []
 
 
 def test_process_document_marks_corrupt_pdf_failed(tmp_path):
@@ -380,6 +490,32 @@ def test_delete_document_cascades_page_text(tmp_path, monkeypatch):
     with SessionLocal() as db:
         assert db.scalars(
             select(DocumentPage).where(DocumentPage.document_id == document_id)
+        ).all() == []
+
+
+def test_delete_document_cascades_chunks(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "UPLOADS_DIR", tmp_path)
+    pdf_path = tmp_path / "cascade_chunks.pdf"
+    _write_pdf(pdf_path, ["Page one"])
+    with SessionLocal() as db:
+        document = _create_document(db, pdf_path, "cascade_chunks.pdf")
+        db.add(
+            DocumentChunk(
+                document_id=document.id,
+                page_number=1,
+                chunk_index=0,
+                content="Page one",
+            )
+        )
+        db.commit()
+        document_id = document.id
+
+    response = client.delete(f"/documents/{document_id}")
+
+    assert response.status_code == 204
+    with SessionLocal() as db:
+        assert db.scalars(
+            select(DocumentChunk).where(DocumentChunk.document_id == document_id)
         ).all() == []
 
 

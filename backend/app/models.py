@@ -48,6 +48,11 @@ class Document(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class DocumentPage(Base):
@@ -82,3 +87,42 @@ class DocumentPage(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     document: Mapped[Document] = relationship(back_populates="pages")
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_id",
+            "chunk_index",
+            name="uq_document_chunks_document_chunk_index",
+        ),
+        CheckConstraint(
+            "page_number > 0",
+            name="ck_document_chunks_page_number_positive",
+        ),
+        CheckConstraint(
+            "chunk_index >= 0",
+            name="ck_document_chunks_index_non_negative",
+        ),
+        CheckConstraint(
+            "length(trim(content)) > 0",
+            name="ck_document_chunks_content_not_blank",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    page_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    document: Mapped[Document] = relationship(back_populates="chunks")
