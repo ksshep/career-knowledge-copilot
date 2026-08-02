@@ -1,13 +1,14 @@
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .database import get_db
+from .document_processor import process_document
 from .models import Document
 
 
@@ -41,6 +42,7 @@ def chat(request: ChatRequest) -> dict[str, str]:
 
 @app.post("/documents", status_code=201, tags=["documents"])
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> dict[str, str | int]:
@@ -77,6 +79,7 @@ async def upload_document(
             detail="Failed to save document metadata.",
         )
 
+    background_tasks.add_task(process_document, document.id)
     metadata = {
         "id": str(document.id),
         "filename": filename,

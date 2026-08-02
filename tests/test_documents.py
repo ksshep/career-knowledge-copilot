@@ -4,8 +4,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select
 from uuid import UUID, uuid4
 
-from backend.app import main
+from backend.app import document_processor, main
 from backend.app.database import SessionLocal, get_db
+from backend.app.document_processor import process_document
 from backend.app.models import Document
 
 
@@ -13,7 +14,10 @@ client = TestClient(main.app)
 
 
 @pytest.fixture(autouse=True)
-def clear_documents():
+def clear_documents(monkeypatch):
+    # Endpoint tests focus on upload/transaction behavior; processor tests call
+    # process_document directly so they can assert each final status reliably.
+    monkeypatch.setattr(main, "process_document", lambda document_id: None)
     main.DOCUMENTS.clear()
     with SessionLocal() as db:
         db.query(Document).delete()
@@ -153,6 +157,175 @@ def test_upload_cleans_file_when_database_commit_fails(tmp_path, monkeypatch):
     assert response.json() == {"detail": "Failed to save document metadata."}
     assert list(tmp_path.iterdir()) == []
     assert main.DOCUMENTS == {}
+
+
+def _write_pdf(path, page_texts):
+    """Write a tiny text PDF without adding a test-only PDF dependency."""
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b""]
+    page_numbers = []
+    content_numbers = []
+    next_number = 3
+    for _ in page_texts:
+        page_numbers.append(next_number)
+        content_numbers.append(next_number + 1)
+        next_number += 2
+
+    font_number = next_number
+    objects[1] = (
+        f"<< /Type /Pages /Kids [{ ' '.join(f'{n} 0 R' for n in page_numbers)}] "
+        f"/Count {len(page_texts)} >>"
+    ).encode()
+    for text, page_number, content_number in zip(
+        page_texts, page_numbers, content_numbers
+    ):
+        objects.append(
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 300] "
+            f"/Resources << /Font << /F1 {font_number} 0 R >> >> "
+            f"/Contents {content_number} 0 R >>".encode()
+        )
+        stream = f"BT /F1 18 Tf 30 250 Td ({text}) Tj ET".encode()
+        objects.append(
+            f"<< /Length {len(stream)} >>\nstream\n".encode()
+            + stream
+            + b"\nendstream"
+        )
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+
+    data = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for number, obj in enumerate(objects, start=1):
+        offsets.append(len(data))
+        data.extend(f"{number} 0 obj\n".encode())
+        data.extend(obj)
+        data.extend(b"\nendobj\n")
+    xref_offset = len(data)
+    data.extend(f"xref\n0 {len(objects) + 1}\n".encode())
+    data.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        data.extend(f"{offset:010d} 00000 n \n".encode())
+    data.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_offset}\n%%EOF\n".encode()
+    )
+    path.write_bytes(data)
+
+
+def _create_document(db, path, filename="processor.pdf"):
+    document = Document(
+        id=uuid4(),
+        filename=filename,
+        storage_path=str(path),
+        file_size_bytes=path.stat().st_size,
+        status="processing",
+    )
+    db.add(document)
+    db.commit()
+    return document
+
+
+def test_upload_registers_background_processor(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "UPLOADS_DIR", tmp_path)
+    calls = []
+    monkeypatch.setattr(main, "process_document", lambda document_id: calls.append(document_id))
+
+    response = client.post(
+        "/documents",
+        files={"file": ("queued.pdf", b"%PDF-1.4", "application/pdf")},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "processing"
+    assert calls == [UUID(response.json()["id"])]
+
+
+def test_process_document_marks_text_pdf_ready(tmp_path):
+    pdf_path = tmp_path / "ready.pdf"
+    _write_pdf(pdf_path, ["Resume text"])
+    with SessionLocal() as db:
+        document = _create_document(db, pdf_path)
+        document_id = document.id
+
+    process_document(document_id)
+
+    with SessionLocal() as db:
+        saved = db.get(Document, document_id)
+        assert saved.status == "ready"
+        assert saved.error_message is None
+    assert pdf_path.exists()
+
+
+def test_process_document_marks_blank_pdf_failed(tmp_path):
+    pdf_path = tmp_path / "failed.pdf"
+    _write_pdf(pdf_path, [""])
+    with SessionLocal() as db:
+        document = _create_document(db, pdf_path)
+        document_id = document.id
+
+    process_document(document_id)
+
+    with SessionLocal() as db:
+        saved = db.get(Document, document_id)
+        assert saved.status == "failed"
+    assert saved.error_message
+    assert pdf_path.exists()
+
+
+def test_process_document_marks_corrupt_pdf_failed(tmp_path):
+    pdf_path = tmp_path / "corrupt.pdf"
+    pdf_path.write_bytes(b"not a PDF")
+    with SessionLocal() as db:
+        document = _create_document(db, pdf_path)
+        document_id = document.id
+
+    process_document(document_id)
+
+    with SessionLocal() as db:
+        saved = db.get(Document, document_id)
+        assert saved.status == "failed"
+        assert "Unable to read PDF" in saved.error_message
+    assert pdf_path.exists()
+
+
+def test_process_document_missing_document_is_safe():
+    process_document(uuid4())
+
+
+def test_process_document_rolls_back_on_database_error(monkeypatch):
+    class FakeDocument:
+        storage_path = "unused.pdf"
+        status = "processing"
+        error_message = None
+
+    class FailingSession:
+        def __init__(self):
+            self.document = FakeDocument()
+            self.rollback_called = False
+            self.closed = False
+
+        def get(self, model, document_id):
+            return self.document
+
+        def commit(self):
+            raise SQLAlchemyError("simulated status update failure")
+
+        def rollback(self):
+            self.rollback_called = True
+
+        def close(self):
+            self.closed = True
+
+    session = FailingSession()
+    monkeypatch.setattr(document_processor, "SessionLocal", lambda: session)
+    monkeypatch.setattr(
+        document_processor,
+        "extract_pdf_pages",
+        lambda path: [{"page_number": 1, "text": "text"}],
+    )
+
+    document_processor.process_document(uuid4())
+
+    assert session.rollback_called is True
+    assert session.closed is True
 
 
 def test_delete_existing_document_returns_no_content(tmp_path, monkeypatch):
