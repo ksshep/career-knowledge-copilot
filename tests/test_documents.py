@@ -254,6 +254,29 @@ def test_process_document_marks_text_pdf_ready(tmp_path):
     assert pdf_path.exists()
 
 
+def test_process_document_skips_blank_page_and_preserves_page_number(tmp_path):
+    pdf_path = tmp_path / "mixed.pdf"
+    _write_pdf(pdf_path, ["Page one", "   "])
+    with SessionLocal() as db:
+        document = _create_document(db, pdf_path)
+        document_id = document.id
+
+    process_document(document_id)
+
+    with SessionLocal() as db:
+        saved = db.get(Document, document_id)
+        pages = db.scalars(
+            select(DocumentPage)
+            .where(DocumentPage.document_id == document_id)
+            .order_by(DocumentPage.page_number)
+        ).all()
+        assert saved.status == "ready"
+        assert [(page.page_number, page.text) for page in pages] == [
+            (1, "Page one")
+        ]
+    assert pdf_path.exists()
+
+
 def test_process_document_marks_blank_pdf_failed(tmp_path):
     pdf_path = tmp_path / "failed.pdf"
     _write_pdf(pdf_path, [""])

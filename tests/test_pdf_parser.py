@@ -83,6 +83,18 @@ def test_page_numbers_start_at_one(tmp_path):
     assert [page["page_number"] for page in pages] == [1, 2, 3]
 
 
+def test_ignores_blank_pages_without_renumbering(tmp_path):
+    pdf_path = tmp_path / "mixed.pdf"
+    _write_pdf(pdf_path, ["First page", "   ", "Third page"])
+
+    pages = extract_pdf_pages(pdf_path)
+
+    assert pages == [
+        {"page_number": 1, "text": "First page"},
+        {"page_number": 3, "text": "Third page"},
+    ]
+
+
 def test_blank_pdf_raises_no_text_error(tmp_path):
     pdf_path = tmp_path / "blank.pdf"
     _write_pdf(pdf_path, ["", ""])

@@ -13,13 +13,11 @@ def extract_pdf_pages(pdf_path: str | Path) -> list[dict[str, int | str]]:
 
     try:
         reader = PdfReader(str(path))
-        pages = [
-            {
-                "page_number": page_number,
-                "text": page.extract_text() or "",
-            }
-            for page_number, page in enumerate(reader.pages, start=1)
-        ]
+        pages = []
+        for page_number, page in enumerate(reader.pages, start=1):
+            text = page.extract_text() or ""
+            if text.strip():
+                pages.append({"page_number": page_number, "text": text})
     except (OSError, PdfReadError, ValueError) as exc:
         raise PdfParserError(f"Unable to read PDF: {path}") from exc
 
