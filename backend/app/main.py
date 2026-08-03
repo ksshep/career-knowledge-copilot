@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .document_processor import process_document
 from .models import Document
+from .vector_search import VectorSearchError, search_similar_chunks
 
 
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
@@ -20,6 +21,11 @@ DOCUMENTS: dict[str, dict[str, str | int]] = {}
 
 class ChatRequest(BaseModel):
     message: str
+
+
+class SearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
 
 
 app = FastAPI(
@@ -38,6 +44,20 @@ def health() -> dict[str, str]:
 @app.post("/chat", tags=["chat"])
 def chat(request: ChatRequest) -> dict[str, str]:
     return {"reply": f"你问的是：{request.message}"}
+
+
+@app.post("/search", tags=["search"])
+def search_documents(
+    request: SearchRequest,
+    db: Session = Depends(get_db),
+) -> dict[str, list[dict[str, str | int | float]]]:
+    try:
+        items = search_similar_chunks(db, request.query, request.top_k)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except VectorSearchError:
+        raise HTTPException(status_code=500, detail="Vector search failed.")
+    return {"items": items}
 
 
 @app.post("/documents", status_code=201, tags=["documents"])

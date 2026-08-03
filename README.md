@@ -9,6 +9,7 @@ Career Knowledge Copilot 是面向大学生求职场景的资料知识库助手�
 - `POST /documents`：上传不超过 20 MB 的 PDF，保存文件和数据库元数据。
 - `GET /documents`：从 PostgreSQL 查询文档列表。
 - `DELETE /documents/{id}`：删除文档记录和本地 PDF 文件。
+- `POST /search`：使用 Fake Embedding 和 pgvector 检索最相似的 ready 文档 Chunk。
 - PDF 后台处理：上传后状态为 `processing`，解析成功变为 `ready`，解析失败变为 `failed`，失败原因保存到 `error_message`。
 - `document_pages` 表：持久化每页提取出的文本，服务重启后仍可读取。
 - `document_chunks` 表：持久化按页切分后的文本片段，为后续 Embedding 和向量检索准备数据。
@@ -45,6 +46,17 @@ alembic upgrade head
 ```
 
 当前迁移版本为 `0004_add_chunk_embedding`，会启用 PostgreSQL `vector` 扩展并为 `document_chunks` 增加可为空的向量字段。
+
+检索请求示例：
+
+```json
+{
+  "query": "Python 项目经验",
+  "top_k": 5
+}
+```
+
+检索结果只包含 `ready` 文档中有 embedding 的 Chunk，并按相似度从高到低返回。
 
 ## 运行测试
 
