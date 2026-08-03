@@ -10,12 +10,13 @@ Career Knowledge Copilot 是面向大学生求职场景的资料知识库助手�
 - `GET /documents`：从 PostgreSQL 查询文档列表。
 - `DELETE /documents/{id}`：删除文档记录和本地 PDF 文件。
 - `POST /search`：使用 Fake Embedding 和 pgvector 检索最相似的 ready 文档 Chunk。
+- `rag_context`：将检索结果整理为带文件名、页码和片段编号的有限上下文。
 - PDF 后台处理：上传后状态为 `processing`，解析成功变为 `ready`，解析失败变为 `failed`，失败原因保存到 `error_message`。
 - `document_pages` 表：持久化每页提取出的文本，服务重启后仍可读取。
 - `document_chunks` 表：持久化按页切分后的文本片段，为后续 Embedding 和向量检索准备数据。
 - `document_chunks.embedding`：使用 pgvector 保存 Fake Embedding 向量，当前维度由 `EMBEDDING_DIMENSION` 统一定义。
 
-当前尚未接入 OCR、Embedding、RAG、LangChain、真实大模型或 Vue 前端。
+当前尚未接入 OCR、真实 Embedding API、完整 RAG、LangChain、真实大模型或 Vue 前端。
 
 ## 技术栈
 
@@ -77,5 +78,7 @@ git diff --check
 | `backend/app/pdf_parser.py` | 按页提取 PDF 文本 |
 | `backend/app/document_processor.py` | 后台解析并更新文档状态、页面文本 |
 | `backend/app/text_splitter.py` | 将页面文本切成带重叠的小段 |
+| `backend/app/vector_search.py` | 使用 pgvector 检索相似的文档 Chunk |
+| `backend/app/rag_context.py` | 构建发送给模型的受限上下文和引用 |
 | `alembic/versions/` | 数据库迁移历史 |
 | `tests/` | 自动化测试 |

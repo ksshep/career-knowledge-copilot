@@ -28,6 +28,7 @@ def search_similar_chunks(
         statement = (
             select(
                 DocumentChunk.document_id,
+                Document.filename,
                 DocumentChunk.page_number,
                 DocumentChunk.chunk_index,
                 DocumentChunk.content,
@@ -48,6 +49,7 @@ def search_similar_chunks(
     return [
         {
             "document_id": str(row.document_id),
+            "filename": row.filename,
             "page_number": row.page_number,
             "chunk_index": row.chunk_index,
             "content": row.content,
