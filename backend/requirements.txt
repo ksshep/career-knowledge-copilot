@@ -8,3 +8,4 @@ psycopg[binary]
 alembic
 python-dotenv
 pypdf
+pgvector

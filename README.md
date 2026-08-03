@@ -12,6 +12,7 @@ Career Knowledge Copilot 是面向大学生求职场景的资料知识库助手�
 - PDF 后台处理：上传后状态为 `processing`，解析成功变为 `ready`，解析失败变为 `failed`，失败原因保存到 `error_message`。
 - `document_pages` 表：持久化每页提取出的文本，服务重启后仍可读取。
 - `document_chunks` 表：持久化按页切分后的文本片段，为后续 Embedding 和向量检索准备数据。
+- `document_chunks.embedding`：使用 pgvector 保存 Fake Embedding 向量，当前维度由 `EMBEDDING_DIMENSION` 统一定义。
 
 当前尚未接入 OCR、Embedding、RAG、LangChain、真实大模型或 Vue 前端。
 
@@ -22,6 +23,7 @@ Career Knowledge Copilot 是面向大学生求职场景的资料知识库助手�
 - SQLAlchemy、Alembic
 - Docker Compose
 - pypdf
+- pgvector
 
 ## 本地启动
 
@@ -41,6 +43,8 @@ Swagger 地址：<http://127.0.0.1:8001/docs>
 ```bash
 alembic upgrade head
 ```
+
+当前迁移版本为 `0004_add_chunk_embedding`，会启用 PostgreSQL `vector` 扩展并为 `document_chunks` 增加可为空的向量字段。
 
 ## 运行测试
 

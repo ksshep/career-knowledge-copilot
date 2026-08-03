@@ -36,4 +36,19 @@ os.environ["DATABASE_URL"] = test_url.render_as_string(hide_password=False)
 from backend.app.database import Base, engine  # noqa: E402
 from backend.app import models  # noqa: E402,F401
 
+with engine.begin() as connection:
+    connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+
 Base.metadata.create_all(bind=engine)
+
+# Existing local test databases were created before the embedding column
+# existed. Keep the fixture backward-compatible without changing migrations.
+from backend.app.embedding import EMBEDDING_DIMENSION  # noqa: E402
+
+with engine.begin() as connection:
+    connection.execute(
+        text(
+            "ALTER TABLE document_chunks "
+            f"ADD COLUMN IF NOT EXISTS embedding vector({EMBEDDING_DIMENSION})"
+        )
+    )
