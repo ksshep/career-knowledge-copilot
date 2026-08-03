@@ -8,8 +8,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .database import get_db
+from .chat_provider import ChatProvider, FakeChatProvider
 from .document_processor import process_document
 from .models import Document
+from .rag_context import RAGContextError, build_rag_context
 from .vector_search import VectorSearchError, search_similar_chunks
 
 
@@ -17,6 +19,7 @@ MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 UPLOADS_DIR = PROJECT_ROOT / "uploads"
 DOCUMENTS: dict[str, dict[str, str | int]] = {}
+chat_provider: ChatProvider = FakeChatProvider()
 
 
 class ChatRequest(BaseModel):
@@ -24,6 +27,11 @@ class ChatRequest(BaseModel):
 
 
 class SearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+class AskRequest(BaseModel):
     query: str
     top_k: int = 5
 
@@ -58,6 +66,48 @@ def search_documents(
     except VectorSearchError:
         raise HTTPException(status_code=500, detail="Vector search failed.")
     return {"items": items}
+
+
+@app.post("/ask", tags=["ask"])
+def ask_documents(
+    request: AskRequest,
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    try:
+        search_results = search_similar_chunks(db, request.query, request.top_k)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except (VectorSearchError, SQLAlchemyError):
+        raise HTTPException(status_code=500, detail="Search failed.")
+
+    if not search_results:
+        return {
+            "answer": "没有找到足够依据",
+            "citations": [],
+            "has_evidence": False,
+        }
+
+    try:
+        rag_context = build_rag_context(search_results)
+    except RAGContextError:
+        raise HTTPException(status_code=500, detail="Failed to build answer context.")
+
+    try:
+        answer = chat_provider.generate(
+            system_prompt=(
+                "你只能依据用户提供的资料回答问题。"
+                "资料不足时必须明确说明无法确定，不得编造引用。"
+            ),
+            user_prompt=rag_context["context"],
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Chat provider failed.") from exc
+
+    return {
+        "answer": answer,
+        "citations": rag_context["citations"],
+        "has_evidence": True,
+    }
 
 
 @app.post("/documents", status_code=201, tags=["documents"])
