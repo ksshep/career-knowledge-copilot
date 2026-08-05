@@ -12,6 +12,7 @@ Career Knowledge Copilot 是面向大学生求职场景的资料知识库助手�
 - `POST /search`：使用 Fake Embedding 和 pgvector 检索最相似的 ready 文档 Chunk。
 - `POST /ask`：检索相关 Chunk、构建受限上下文，并使用 Fake Chat Provider 返回模拟回答和引用。
 - Chat Provider：默认使用 Fake Provider；配置通用 LLM 环境变量后可调用 OpenAI-compatible Chat API。
+- Embedding Provider：保留 Fake Provider；配置通用 Embedding 环境变量后可单独调用兼容 API，当前尚未接入文档处理流程。
 - `rag_context`：将检索结果整理为带文件名、页码和片段编号的有限上下文。
 - PDF 后台处理：上传后状态为 `processing`，解析成功变为 `ready`，解析失败变为 `failed`，失败原因保存到 `error_message`。
 - `document_pages` 表：持久化每页提取出的文本，服务重启后仍可读取。
@@ -21,6 +22,8 @@ Career Knowledge Copilot 是面向大学生求职场景的资料知识库助手�
 当前尚未接入 OCR、真实 Embedding API、真实聊天模型、LangChain 或 Vue 前端。
 
 真实模型配置使用 `.env` 中的 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL` 和 `LLM_TIMEOUT_SECONDS`。项目不会把这些值写入代码；未配置时继续使用 Fake Provider。
+
+Embedding 配置使用 `.env` 中的 `EMBEDDING_API_KEY`、`EMBEDDING_BASE_URL`、`EMBEDDING_MODEL` 和 `EMBEDDING_TIMEOUT_SECONDS`。本阶段不会用它替换现有 Fake Embedding，也不会改变数据库向量维度。
 
 ## 技术栈
 
@@ -85,5 +88,6 @@ git diff --check
 | `backend/app/vector_search.py` | 使用 pgvector 检索相似的文档 Chunk |
 | `backend/app/rag_context.py` | 构建发送给模型的受限上下文和引用 |
 | `backend/app/chat_provider.py` | 定义聊天模型接口并提供本地 Fake Provider |
+| `backend/app/embedding.py` | 定义 Embedding 接口、Fake Provider 和通用 HTTP Provider |
 | `alembic/versions/` | 数据库迁移历史 |
 | `tests/` | 自动化测试 |
