@@ -5,9 +5,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .database import SessionLocal
-from .embedding import EMBEDDING_DIMENSION, EmbeddingError, FakeEmbeddingProvider
+from .embedding import EMBEDDING_DIMENSION, EmbeddingError
 from .models import Document, DocumentChunk, DocumentPage
 from .pdf_parser import PdfParserError, extract_pdf_pages
+from .provider_factory import get_embedding_provider
 from .text_splitter import split_text_into_chunks
 
 
@@ -30,7 +31,7 @@ def process_document(document_id: UUID | str) -> None:
                 for content in split_text_into_chunks(page_text):
                     chunk_records.append((page_number, content))
 
-            embeddings = FakeEmbeddingProvider().embed_texts(
+            embeddings = get_embedding_provider().embed_texts(
                 [content for _, content in chunk_records]
             )
             if len(embeddings) != len(chunk_records):

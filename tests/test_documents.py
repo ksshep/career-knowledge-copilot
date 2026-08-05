@@ -459,8 +459,8 @@ def test_embedding_failure_marks_failed_and_leaves_no_data(tmp_path, monkeypatch
 
     monkeypatch.setattr(
         document_processor,
-        "FakeEmbeddingProvider",
-        FailingEmbeddingProvider,
+        "get_embedding_provider",
+        lambda: FailingEmbeddingProvider(),
     )
     process_document(document_id)
 
@@ -474,6 +474,35 @@ def test_embedding_failure_marks_failed_and_leaves_no_data(tmp_path, monkeypatch
         assert db.scalars(
             select(DocumentChunk).where(DocumentChunk.document_id == document_id)
         ).all() == []
+
+
+def test_process_document_uses_embedding_provider_factory(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "factory.pdf"
+    _write_pdf(pdf_path, ["Factory embedding test"])
+    with SessionLocal() as db:
+        document = _create_document(db, pdf_path)
+        document_id = document.id
+
+    class RecordingProvider:
+        def __init__(self):
+            self.inputs = []
+
+        def embed_texts(self, texts):
+            self.inputs.append(texts)
+            return FakeEmbeddingProvider().embed_texts(texts)
+
+    provider = RecordingProvider()
+    monkeypatch.setattr(
+        document_processor,
+        "get_embedding_provider",
+        lambda: provider,
+    )
+
+    process_document(document_id)
+
+    assert provider.inputs == [["Factory embedding test"]]
+    with SessionLocal() as db:
+        assert db.get(Document, document_id).status == "ready"
 
 
 def test_process_document_marks_corrupt_pdf_failed(tmp_path):

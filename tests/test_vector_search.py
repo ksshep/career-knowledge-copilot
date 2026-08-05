@@ -7,13 +7,14 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from backend.app import main
 from backend.app.database import SessionLocal
-from backend.app.embedding import FakeEmbeddingProvider
+from backend.app.embedding import EMBEDDING_DIMENSION, FakeEmbeddingProvider
 from backend.app.models import Document, DocumentChunk
 from backend.app.vector_search import (
     MAX_TOP_K,
     VectorSearchError,
     search_similar_chunks,
 )
+from backend.app import vector_search
 
 
 client = TestClient(main.app)
@@ -152,6 +153,43 @@ def test_search_database_error_becomes_clear_exception():
 
     with pytest.raises(VectorSearchError, match="Vector search failed"):
         search_similar_chunks(FailingSession(), "query")
+
+
+def test_search_uses_embedding_provider_factory(monkeypatch):
+    class RecordingProvider:
+        def __init__(self):
+            self.queries = []
+
+        def embed_texts(self, texts):
+            self.queries.append(texts)
+            return [FakeEmbeddingProvider().embed_texts(texts)[0]]
+
+    provider = RecordingProvider()
+    monkeypatch.setattr(vector_search, "get_embedding_provider", lambda: provider)
+    with SessionLocal() as db:
+        _add_document(
+            db,
+            chunks=[(1, 0, "Python", FakeEmbeddingProvider().embed_texts(["Python"])[0])],
+        )
+        results = search_similar_chunks(db, "Python")
+
+    assert results
+    assert provider.queries == [["Python"]]
+
+
+def test_search_rejects_query_embedding_with_wrong_dimension(monkeypatch):
+    class WrongDimensionProvider:
+        def embed_texts(self, texts):
+            return [[0.1] * (EMBEDDING_DIMENSION - 1)]
+
+    monkeypatch.setattr(
+        vector_search,
+        "get_embedding_provider",
+        lambda: WrongDimensionProvider(),
+    )
+    with SessionLocal() as db:
+        with pytest.raises(VectorSearchError, match="dimension"):
+            search_similar_chunks(db, "Python")
 
 
 def test_search_endpoint_returns_items():

@@ -72,8 +72,8 @@ def search_documents(
         items = search_similar_chunks(db, request.query, request.top_k)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except VectorSearchError:
-        raise HTTPException(status_code=500, detail="Vector search failed.")
+    except VectorSearchError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
     return {"items": items}
 
 

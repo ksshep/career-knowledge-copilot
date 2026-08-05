@@ -2,8 +2,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from .embedding import EmbeddingError, FakeEmbeddingProvider
+from .embedding import EMBEDDING_DIMENSION, EmbeddingError
 from .models import Document, DocumentChunk
+from .provider_factory import get_embedding_provider
 
 
 DEFAULT_TOP_K = 5
@@ -23,7 +24,11 @@ def search_similar_chunks(
     _validate_search_inputs(query, top_k)
 
     try:
-        query_embedding = FakeEmbeddingProvider().embed_texts([query])[0]
+        query_embedding = get_embedding_provider().embed_texts([query])[0]
+        if len(query_embedding) != EMBEDDING_DIMENSION:
+            raise VectorSearchError(
+                f"Query embedding dimension must be {EMBEDDING_DIMENSION}."
+            )
         distance = DocumentChunk.embedding.cosine_distance(query_embedding)
         statement = (
             select(
