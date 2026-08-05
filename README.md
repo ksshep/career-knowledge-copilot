@@ -11,6 +11,7 @@ Career Knowledge Copilot 是面向大学生求职场景的资料知识库助手�
 - `DELETE /documents/{id}`：删除文档记录和本地 PDF 文件。
 - `POST /search`：使用 Fake Embedding 和 pgvector 检索最相似的 ready 文档 Chunk。
 - `POST /ask`：检索相关 Chunk、构建受限上下文，并使用 Fake Chat Provider 返回模拟回答和引用。
+- Chat Provider：默认使用 Fake Provider；配置通用 LLM 环境变量后可调用 OpenAI-compatible Chat API。
 - `rag_context`：将检索结果整理为带文件名、页码和片段编号的有限上下文。
 - PDF 后台处理：上传后状态为 `processing`，解析成功变为 `ready`，解析失败变为 `failed`，失败原因保存到 `error_message`。
 - `document_pages` 表：持久化每页提取出的文本，服务重启后仍可读取。
@@ -18,6 +19,8 @@ Career Knowledge Copilot 是面向大学生求职场景的资料知识库助手�
 - `document_chunks.embedding`：使用 pgvector 保存 Fake Embedding 向量，当前维度由 `EMBEDDING_DIMENSION` 统一定义。
 
 当前尚未接入 OCR、真实 Embedding API、真实聊天模型、LangChain 或 Vue 前端。
+
+真实模型配置使用 `.env` 中的 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL` 和 `LLM_TIMEOUT_SECONDS`。项目不会把这些值写入代码；未配置时继续使用 Fake Provider。
 
 ## 技术栈
 

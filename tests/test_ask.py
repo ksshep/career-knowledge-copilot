@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
@@ -7,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from backend.app import main
 from backend.app.database import SessionLocal
 from backend.app.embedding import FakeEmbeddingProvider
+from backend.app.chat_provider import OpenAICompatibleChatProvider
 from backend.app.models import Document, DocumentChunk
 from backend.app.vector_search import VectorSearchError
 
@@ -116,3 +118,29 @@ def test_ask_returns_clear_chat_provider_error(monkeypatch):
 
     assert response.status_code == 500
     assert response.json() == {"detail": "Chat provider failed."}
+
+
+def test_ask_uses_generic_compatible_provider(monkeypatch):
+    _add_ready_document()
+
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "generic answer"}}]},
+        )
+
+    provider = OpenAICompatibleChatProvider(
+        api_key="test-key",
+        base_url="https://provider.example.com/v1",
+        model="test-model",
+        timeout_seconds=3,
+        transport=httpx.MockTransport(handler),
+    )
+    main.app.dependency_overrides[main.get_chat_provider] = lambda: provider
+    try:
+        response = client.post("/ask", json={"query": "FastAPI"})
+    finally:
+        main.app.dependency_overrides.pop(main.get_chat_provider, None)
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "generic answer"

@@ -8,7 +8,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .chat_provider import ChatProvider, FakeChatProvider
+from .chat_provider import (
+    ChatProvider,
+    ChatProviderError,
+    create_chat_provider_from_env,
+)
 from .document_processor import process_document
 from .models import Document
 from .rag_context import RAGContextError, build_rag_context
@@ -19,7 +23,7 @@ MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 UPLOADS_DIR = PROJECT_ROOT / "uploads"
 DOCUMENTS: dict[str, dict[str, str | int]] = {}
-chat_provider: ChatProvider = FakeChatProvider()
+chat_provider: ChatProvider = create_chat_provider_from_env()
 
 
 class ChatRequest(BaseModel):
@@ -34,6 +38,11 @@ class SearchRequest(BaseModel):
 class AskRequest(BaseModel):
     query: str
     top_k: int = 5
+
+
+def get_chat_provider() -> ChatProvider:
+    """Resolve the provider through configuration without coupling the route to a vendor."""
+    return chat_provider
 
 
 app = FastAPI(
@@ -72,6 +81,7 @@ def search_documents(
 def ask_documents(
     request: AskRequest,
     db: Session = Depends(get_db),
+    provider: ChatProvider = Depends(get_chat_provider),
 ) -> dict[str, object]:
     try:
         search_results = search_similar_chunks(db, request.query, request.top_k)
@@ -93,13 +103,15 @@ def ask_documents(
         raise HTTPException(status_code=500, detail="Failed to build answer context.")
 
     try:
-        answer = chat_provider.generate(
+        answer = provider.generate(
             system_prompt=(
                 "你只能依据用户提供的资料回答问题。"
                 "资料不足时必须明确说明无法确定，不得编造引用。"
             ),
             user_prompt=rag_context["context"],
         )
+    except ChatProviderError as exc:
+        raise HTTPException(status_code=500, detail="Chat provider failed.") from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail="Chat provider failed.") from exc
 
