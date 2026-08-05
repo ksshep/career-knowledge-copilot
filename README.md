@@ -17,13 +17,19 @@ Career Knowledge Copilot 是面向大学生求职场景的资料知识库助手�
 - PDF 后台处理：上传后状态为 `processing`，解析成功变为 `ready`，解析失败变为 `failed`，失败原因保存到 `error_message`。
 - `document_pages` 表：持久化每页提取出的文本，服务重启后仍可读取。
 - `document_chunks` 表：持久化按页切分后的文本片段，为后续 Embedding 和向量检索准备数据。
-- `document_chunks.embedding`：使用 pgvector 保存 Fake Embedding 向量，当前维度由 `EMBEDDING_DIMENSION` 统一定义。
+- `document_chunks.embedding`：使用 pgvector 保存 Embedding 向量，当前维度为 `1536`，由 `EMBEDDING_DIMENSION` 统一定义。
 
-当前默认不启用真实 Embedding API；尚未接入 OCR、真实聊天模型、LangChain 或 Vue 前端。
+当前默认使用 Fake Embedding（1536 维）；尚未接入 OCR、真实聊天模型、LangChain 或 Vue 前端。
 
 真实模型配置使用 `.env` 中的 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL` 和 `LLM_TIMEOUT_SECONDS`。项目不会把这些值写入代码；未配置时继续使用 Fake Provider。
 
-Embedding 配置使用 `.env` 中的 `EMBEDDING_PROVIDER`、`EMBEDDING_API_KEY`、`EMBEDDING_BASE_URL`、`EMBEDDING_MODEL` 和 `EMBEDDING_TIMEOUT_SECONDS`。默认 provider 是 `fake`，不会访问网络；`compatible` 模式不会改变数据库向量维度。
+Embedding 配置使用 `.env` 中的 `EMBEDDING_PROVIDER`、`EMBEDDING_API_KEY`、`EMBEDDING_BASE_URL`、`EMBEDDING_MODEL` 和 `EMBEDDING_TIMEOUT_SECONDS`。默认 provider 是 `fake`，不会访问网络；`compatible` 模式使用配置的真实模型。
+
+迁移后可用以下命令为历史 Chunk 生成缺失向量（不会删除 PDF、页面或 Chunk）：
+
+```bash
+python -m backend.app.reembed_documents --batch-size 32
+```
 
 ## 技术栈
 
@@ -53,7 +59,7 @@ Swagger 地址：<http://127.0.0.1:8001/docs>
 alembic upgrade head
 ```
 
-当前迁移版本为 `0004_add_chunk_embedding`，会启用 PostgreSQL `vector` 扩展并为 `document_chunks` 增加可为空的向量字段。
+当前迁移版本为 `0005_change_embedding_dimension`，会将 `document_chunks.embedding` 调整为 `vector(1536)`。升级前会清除旧的 8 维 Fake 向量；降级同样会清除向量后改回 8 维，因此降级会丢失向量数据，但不会删除 Chunk 文本。
 
 检索请求示例：
 

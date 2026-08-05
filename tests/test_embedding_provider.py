@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from backend.app.embedding import (
+    EMBEDDING_DIMENSION,
     EmbeddingConfigError,
     EmbeddingError,
     EmbeddingOutputError,
@@ -32,15 +33,18 @@ def test_provider_sends_batch_and_returns_vectors_in_index_order():
             200,
             json={
                 "data": [
-                    {"index": 1, "embedding": [0.3] * 8},
-                    {"index": 0, "embedding": [0.1] * 8},
+                    {"index": 1, "embedding": [0.3] * EMBEDDING_DIMENSION},
+                    {"index": 0, "embedding": [0.1] * EMBEDDING_DIMENSION},
                 ]
             },
         )
 
     vectors = _provider(handler).embed_texts(["first", "second"])
 
-    assert vectors == [[0.1] * 8, [0.3] * 8]
+    assert vectors == [
+        [0.1] * EMBEDDING_DIMENSION,
+        [0.3] * EMBEDDING_DIMENSION,
+    ]
     assert captured["url"] == "https://provider.example.com/v1/embeddings"
     assert captured["headers"]["authorization"] == "Bearer embedding-secret"
     assert captured["body"] == {
@@ -62,8 +66,8 @@ def test_inconsistent_vector_dimensions_raise_error():
             200,
             json={
                 "data": [
-                    {"index": 0, "embedding": [0.1] * 8},
-                    {"index": 1, "embedding": [0.2] * 7},
+                    {"index": 0, "embedding": [0.1] * EMBEDDING_DIMENSION},
+                    {"index": 1, "embedding": [0.2] * (EMBEDDING_DIMENSION - 1)},
                 ]
             },
         )

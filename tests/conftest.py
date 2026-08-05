@@ -32,6 +32,16 @@ with maintenance_engine.connect().execution_options(isolation_level="AUTOCOMMIT"
 maintenance_engine.dispose()
 
 os.environ["DATABASE_URL"] = test_url.render_as_string(hide_password=False)
+# Tests must never use the real network, even when the developer's .env
+# contains production-compatible provider settings.
+os.environ["EMBEDDING_PROVIDER"] = "fake"
+for _name in (
+    "LLM_API_KEY",
+    "LLM_BASE_URL",
+    "LLM_MODEL",
+    "LLM_TIMEOUT_SECONDS",
+):
+    os.environ[_name] = ""
 
 from backend.app.database import Base, engine  # noqa: E402
 from backend.app import models  # noqa: E402,F401
@@ -41,14 +51,19 @@ with engine.begin() as connection:
 
 Base.metadata.create_all(bind=engine)
 
-# Existing local test databases were created before the embedding column
-# existed. Keep the fixture backward-compatible without changing migrations.
+# The isolated test database may still contain the old vector(8) column from
+# earlier runs. Reset only this test database column to the current dimension.
 from backend.app.embedding import EMBEDDING_DIMENSION  # noqa: E402
 
 with engine.begin() as connection:
     connection.execute(
         text(
+            "ALTER TABLE document_chunks DROP COLUMN IF EXISTS embedding"
+        )
+    )
+    connection.execute(
+        text(
             "ALTER TABLE document_chunks "
-            f"ADD COLUMN IF NOT EXISTS embedding vector({EMBEDDING_DIMENSION})"
+            f"ADD COLUMN embedding vector({EMBEDDING_DIMENSION})"
         )
     )
