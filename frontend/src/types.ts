@@ -10,3 +10,15 @@ export interface DocumentItem {
 export interface DocumentListResponse {
   items: DocumentItem[]
 }
+
+export interface Citation {
+  filename: string
+  page_number: number
+  chunk_index: number
+}
+
+export interface AskResponse {
+  answer: string
+  citations: Citation[]
+  has_evidence: boolean
+}

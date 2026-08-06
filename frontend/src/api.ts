@@ -1,4 +1,4 @@
-import type { DocumentItem, DocumentListResponse } from './types'
+import type { AskResponse, DocumentItem, DocumentListResponse } from './types'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8001').replace(/\/$/, '')
 
@@ -50,6 +50,14 @@ export function uploadDocument(file: File): Promise<DocumentItem> {
 
 export function deleteDocument(id: string): Promise<void> {
   return request<void>(`/documents/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export function askQuestion(query: string, topK = 5): Promise<AskResponse> {
+  return request<AskResponse>('/ask', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, top_k: topK }),
+  })
 }
 
 export { ApiError }

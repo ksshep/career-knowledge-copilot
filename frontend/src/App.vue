@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   AlertCircle,
   ArrowUpRight,
@@ -9,6 +9,7 @@ import {
   FolderOpen,
   Inbox,
   LoaderCircle,
+  MessageCircle,
   RefreshCw,
   Trash2,
   UploadCloud,
@@ -17,6 +18,23 @@ import {
 
 import { ApiError, deleteDocument, listDocuments, uploadDocument } from './api'
 import type { DocumentItem, DocumentStatus } from './types'
+import AskPage from './AskPage.vue'
+
+type Page = 'documents' | 'ask'
+
+function pageFromHash(): Page {
+  return window.location.hash === '#ask' ? 'ask' : 'documents'
+}
+
+const currentPage = ref<Page>(pageFromHash())
+
+function syncPageFromHash(): void {
+  currentPage.value = pageFromHash()
+}
+
+function navigateTo(page: Page): void {
+  window.location.hash = page === 'ask' ? '#ask' : '#documents'
+}
 
 const documents = ref<DocumentItem[]>([])
 const isLoading = ref(true)
@@ -133,7 +151,16 @@ async function confirmDelete(): Promise<void> {
 }
 
 onMounted(() => {
-  void loadDocuments()
+  window.addEventListener('hashchange', syncPageFromHash)
+  if (currentPage.value === 'documents') void loadDocuments()
+})
+
+watch(currentPage, (page) => {
+  if (page === 'documents') void loadDocuments()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('hashchange', syncPageFromHash)
 })
 </script>
 
@@ -150,7 +177,12 @@ onMounted(() => {
       <div class="topbar-meta"><span class="online-dot" />本地工作区</div>
     </header>
 
-    <main class="workspace">
+    <nav class="topbar-nav" aria-label="主导航">
+      <a href="#documents" :class="{ 'is-active': currentPage === 'documents' }" @click="navigateTo('documents')"><FolderOpen :size="16" />文档库</a>
+      <a href="#ask" :class="{ 'is-active': currentPage === 'ask' }" @click="navigateTo('ask')"><MessageCircle :size="16" />资料问答</a>
+    </nav>
+
+    <main v-if="currentPage === 'documents'" class="workspace">
       <section class="page-heading" aria-labelledby="page-title">
         <div>
           <p class="section-kicker">DOCUMENTS / LIBRARY</p>
@@ -219,6 +251,8 @@ onMounted(() => {
         </div>
       </section>
     </main>
+
+    <AskPage v-else />
 
     <Teleport to="body">
       <div v-if="selectedForDeletion" class="modal-backdrop" role="presentation" @click.self="closeDeleteDialog">
