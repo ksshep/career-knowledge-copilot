@@ -39,6 +39,7 @@ function navigateTo(page: Page): void {
 const documents = ref<DocumentItem[]>([])
 const isLoading = ref(true)
 const isUploading = ref(false)
+const isDeleting = ref(false)
 const isDragging = ref(false)
 const errorMessage = ref('')
 const successMessage = ref('')
@@ -135,11 +136,16 @@ function closeDeleteDialog(): void {
   selectedForDeletion.value = null
 }
 
+function onGlobalKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && selectedForDeletion.value) closeDeleteDialog()
+}
+
 async function confirmDelete(): Promise<void> {
   const document = selectedForDeletion.value
-  if (!document) return
+  if (!document || isDeleting.value) return
 
   clearFeedback()
+  isDeleting.value = true
   try {
     await deleteDocument(document.id)
     documents.value = documents.value.filter((item) => item.id !== document.id)
@@ -147,11 +153,14 @@ async function confirmDelete(): Promise<void> {
     closeDeleteDialog()
   } catch (error) {
     errorMessage.value = error instanceof ApiError ? error.message : '删除失败，请稍后再试。'
+  } finally {
+    isDeleting.value = false
   }
 }
 
 onMounted(() => {
   window.addEventListener('hashchange', syncPageFromHash)
+  window.addEventListener('keydown', onGlobalKeydown)
   if (currentPage.value === 'documents') void loadDocuments()
 })
 
@@ -161,6 +170,7 @@ watch(currentPage, (page) => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('hashchange', syncPageFromHash)
+  window.removeEventListener('keydown', onGlobalKeydown)
 })
 </script>
 
@@ -260,7 +270,7 @@ onBeforeUnmount(() => {
           <div class="dialog-icon"><Trash2 :size="20" /></div>
           <h2 id="confirm-title">删除这份文档？</h2>
           <p><strong>{{ selectedForDeletion.filename }}</strong> 及其页面文本和向量都会被删除，无法恢复。</p>
-          <div class="dialog-actions"><button class="secondary-button" type="button" @click="closeDeleteDialog">取消</button><button class="danger-button" type="button" @click="confirmDelete"><Trash2 :size="16" />确认删除</button></div>
+          <div class="dialog-actions"><button class="secondary-button" type="button" :disabled="isDeleting" @click="closeDeleteDialog">取消</button><button class="danger-button" type="button" :disabled="isDeleting" @click="confirmDelete"><LoaderCircle v-if="isDeleting" class="spin" :size="16" /><Trash2 v-else :size="16" />{{ isDeleting ? '删除中' : '确认删除' }}</button></div>
         </section>
       </div>
     </Teleport>

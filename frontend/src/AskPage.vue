@@ -149,6 +149,7 @@ watch(messages, saveHistory, { deep: true })
         v-model="query"
         rows="3"
         maxlength="1000"
+        aria-label="输入问题"
         placeholder="输入你想从资料中确认的问题…"
         :disabled="isSending"
         @keydown="onComposerKeydown"
