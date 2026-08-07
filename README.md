@@ -98,3 +98,36 @@ git diff --check
 | `backend/app/provider_factory.py` | 根据环境变量创建 Embedding Provider |
 | `alembic/versions/` | 数据库迁移历史 |
 | `tests/` | 自动化测试 |
+## Docker one-command startup
+
+Prerequisite: Docker Desktop is running. Copy `.env.example` to `.env`, then fill in the PostgreSQL values and any compatible-model API configuration required by your local setup. `.env` is ignored by Git and is never copied into either image.
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+For detached mode, use:
+
+```bash
+docker compose up -d --build
+docker compose ps
+```
+
+Addresses after startup:
+
+- Frontend: http://localhost:5173
+- Swagger: http://localhost:8000/docs
+- Health check: http://localhost:8000/health
+
+The backend runs `alembic upgrade head` before Uvicorn starts. PostgreSQL data is stored in the `career_copilot_pgdata` named volume. Uploaded PDFs are stored in the separate `career_copilot_uploads` named volume. Restarting containers does not remove either volume.
+
+Useful operations:
+
+```bash
+docker compose logs -f
+docker compose logs -f backend
+docker compose up -d --build backend
+docker compose down
+docker compose down -v --remove-orphans
+```
